@@ -1,8 +1,5 @@
-import time
-from typing import Optional
-import math
-from datetime import datetime
 import os
+from typing import Optional
 from dotenv import load_dotenv
 import MetaTrader5 as mt5
 
@@ -15,7 +12,7 @@ def initializeMT5():
     password = os.getenv("MT5_PASSWORD")
     server = os.getenv("MT5_SERVER")
     if not mt5.initialize():
-        print("Initializing MT5 connection failed.")
+        print("> Initializing MT5 connection failed.")
         quit()
     print(f"> Connection to MT5 on server '{server}' was successful.")
     accInfo = mt5.account_info()
@@ -24,18 +21,23 @@ def initializeMT5():
     mt5.login(login, password, server)
 
 
-# Calculates qty (Volume) based on account equity and a given risk
-def getPositionSize(entry, sl, riskTolerance: float = 0.01):
+# Calculates qty (Volume) based on account equity and a given risk (%)
+# riskTolerance should be from 0 to 100. Example: 1.245 means 1.245% of the equity
+def getPositionSize(entry, sl, riskTolerance: float = 1.0):
+    if float(riskTolerance) < 0 or float(riskTolerance) > 100:
+        print(f"> Risk amount of '{riskTolerance}%' is invalid.")
+        return 0.0
     accountBalance = mt5.account_info().equity
     distanceToSL = abs(entry - sl)
-    qty = riskTolerance * accountBalance / distanceToSL
-    return math.floor(qty * 100) / 100
+    qty = riskTolerance / 100 * accountBalance / distanceToSL
+    return round(qty, 2)
 
 
 # Places a market or limit order
 def createOrder(
-    symbol,
-    qty,
+    symbol: str,
+    qty: Optional["float"] = None,
+    risk: Optional["float"] = None,
     isLong: Optional[bool] = None,
     entry: Optional[float] = None,
     sl: Optional[float] = None,
@@ -43,27 +45,48 @@ def createOrder(
     isLimit: Optional[bool] = False,
     comment: Optional[str] = "",
 ):
+    if isLong is None and entry is None:
+        print(
+            "> Missing necessary values. Either pass `isLong` or `entry` to calculate direction."
+        )
+        return
     isBullish = isLong if isLong is not None else entry > sl
     defaultComment = "Long entry" if isBullish else "Short entry"
-    typeLimit = mt5.ORDER_TYPE_BUY_LIMIT if isBullish else mt5.ORDER_TYPE_SELL_LIMIT
-    typeMarket = mt5.ORDER_TYPE_BUY if isBullish else mt5.ORDER_TYPE_SELL
+    orderTypeLimit = (
+        mt5.ORDER_TYPE_BUY_LIMIT if isBullish else mt5.ORDER_TYPE_SELL_LIMIT
+    )
+    orderTypeMarket = mt5.ORDER_TYPE_BUY if isBullish else mt5.ORDER_TYPE_SELL
+    finalQty = qty
+    if (
+        risk is not None
+        and (float(risk) > 0.0 and float(risk) < 100.0)
+        and sl is not None
+    ):
+        localEntryPrice = entry
+        if entry is None:
+            localEntryPrice = (
+                mt5.symbol_info_tick(symbol).ask
+                if isBullish
+                else mt5.symbol_info_tick(symbol).bid
+            )
+        finalQty = getPositionSize(localEntryPrice, sl, risk)
     request = {
         "action": mt5.TRADE_ACTION_PENDING if isLimit else mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,
-        "volume": qty,
-        "type": typeLimit if isLimit else typeMarket,
-        # "deviation": 20,
+        "volume": finalQty,
+        "type": orderTypeLimit if isLimit else orderTypeMarket,
+        "deviation": 20,
         **({"price": float(entry)} if isLimit else {}),
         **({"sl": float(sl)} if sl is not None else {}),
         **({"tp": float(tp)} if tp is not None else {}),
         "magic": 729343,
         "comment": comment if comment != "" else defaultComment,
         "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_RETURN,
+        "type_filling": mt5.ORDER_FILLING_IOC,
     }
     result = mt5.order_send(request)
     if result is None:
-        print("Something went wrong when creating an order.")
+        print("> Something went wrong when creating an order.")
         print(f"> request: {request}")
         print(mt5.last_error())
     return result
@@ -73,7 +96,7 @@ def createOrder(
 def cancelAll(symbol: Optional["str"]):
     orders = mt5.orders_get(symbol=symbol) if symbol is not None else mt5.orders_get()
     if orders is None:
-        print("No pending orders found")
+        print("> No pending orders found.")
         return
     print(orders)
     for order in orders:
@@ -84,11 +107,13 @@ def cancelAll(symbol: Optional["str"]):
                 "order": order.ticket,
                 "symbol": order.symbol,
                 "magic": order.magic,
-                "comment": "Canceling limit order",
+                "comment": "Cancel all orders",
             }
             result = mt5.order_send(request)
             if result.retcode == mt5.TRADE_RETCODE_DONE:
-                print(f"> Limit order {order.ticket} canceled successfully.")
+                print(
+                    f"> Successfully canceled limit order {order.ticket} with comment '{order.comment}'."
+                )
             else:
                 print(
                     f"> Failed to cancel limit order {order.ticket}, retcode: {result.retcode}"
@@ -99,7 +124,7 @@ def cancelAll(symbol: Optional["str"]):
 def cancelPendingOrder(id: str):
     orders = mt5.orders_get()
     if orders is None:
-        print("No pending orders found")
+        print("> No pending orders found.")
         return
     order = next(
         (
@@ -120,9 +145,9 @@ def cancelPendingOrder(id: str):
         }
         result = mt5.order_send(request)
         if result is None:
-            print("Failed to cancel specific order. Error:", mt5.last_error())
+            print("> Failed to cancel specific order. Error:", mt5.last_error())
         elif result.retcode == mt5.TRADE_RETCODE_DONE:
-            print(f"> Order with comment '{id}' successfully canceled.")
+            print(f"> Successfully canceled order with comment '{id}'.")
         else:
             print(
                 f"> Failed to cancel order with comment '{id}'. Retcode: {result.retcode}"
@@ -137,7 +162,7 @@ def cancelPendingOrder(id: str):
 # Updates SL and/or TP of an open position or pending order based on its comment
 def updateSLTP(id: str, sl: float = None, tp: float = None):
     if sl is None and tp is None:
-        print("Both SL and TP are null. Nothing to update.")
+        print("> Both SL and TP are null. Nothing to update.")
         return
 
     openPositions = mt5.positions_get()
@@ -149,21 +174,20 @@ def updateSLTP(id: str, sl: float = None, tp: float = None):
     if pendingOrders is not None:
         positions.extend(pendingOrders)
     if openPositions is None:
-        print("No active positions found.")
+        print("> No active positions found.")
         return
     if not positions:
-        print("No active positions or pending orders found. Nothing to update.")
+        print("> No active positions or pending orders found. Nothing to update.")
         return
 
     trade = next((t for t in positions if t.comment == id), None)
-
     if trade:
         isOpen = hasattr(trade, "position_id") and trade.position_id != 0
         request = {
             "action": mt5.TRADE_ACTION_SLTP if isOpen else mt5.TRADE_ACTION_MODIFY,
             "symbol": trade.symbol,
             "magic": trade.magic,
-            "comment": "Position update" if isOpen else "Order update",
+            "comment": trade.comment,
             **({"position": trade.ticket} if isOpen else {"order": trade.ticket}),
             **({"price": trade.price_open} if not isOpen else {}),
             "sl": float(sl) if sl is not None else trade.sl,
@@ -171,36 +195,114 @@ def updateSLTP(id: str, sl: float = None, tp: float = None):
         }
         result = mt5.order_send(request)
         if result is None:
-            print("Order send failed. Error:", mt5.last_error())
+            print("> Order send failed. Error:", mt5.last_error())
         elif result.retcode == mt5.TRADE_RETCODE_DONE:
-            print(f"> SL/TP for trade with comment '{id}' successfully updated.")
+            print(f"> Successfully updated SL/TP for trade with comment '{id}'.")
         else:
             print(f"> Failed to update SL/TP. Retcode: {result.retcode}")
             print(f"> trade: {trade}")
             print(f"> result: {result}")
     else:
         print(f"> No open position or pending order found with the comment: '{id}'")
-        print(f"> Current positions: {positions}")
+        print(f"> Current open positions: {positions}")
 
 
-def testOperation():
-    trades = [
-        {"entry": 58000, "sl": 56000, "risk": 0.005, "comment": "p1"},
-        {"entry": 55500, "sl": 54000, "risk": 0.01, "comment": "p2"},
-        {"entry": 52000, "sl": 50000, "risk": 0.015, "comment": "p3"},
-    ]
+# Closes an open position based on its comment, optionally closes % of the position
+def closePosition(id: str, percent: Optional["float"] = None):
+    positions = mt5.positions_get()
+    perc = 100.0
+    if positions is None:
+        print("> No active positions found.")
+        return
+    if percent is not None:
+        if float(percent) <= 0.0 or float(percent) > 100.0:
+            print(
+                f"> Percent passed '{percent}' is invalid. Acceptable values are between 0 and 100."
+            )
+            return
+        perc = float(percent)
 
-    # for t in trades:
-    #     createOrder(
-    #         symbol="BTCUSD",
-    #         qty=getPositionSize(t["entry"], t["sl"], t["risk"]),
-    #         entry=t["entry"],
-    #         sl=t["sl"],
-    #         isLimit=True,
-    #         comment=t["comment"],
-    #     )
+    position = next((p for p in positions if p.comment == id), None)
+    if position:
+        volumeToClose = round(position.volume * perc / 100, 2)
+        if volumeToClose < mt5.symbol_info(position.symbol).volume_min:
+            print(
+                f"> Volume to close '{volumeToClose}' is less than the broker's minimum lot size."
+            )
+            return
 
-    # cancelAll()
-    # cancelPendingOrder("p2")
-    updateSLTP("p1", 54000, 68000)
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": position.symbol,
+            "volume": volumeToClose,
+            "type": (
+                mt5.ORDER_TYPE_SELL
+                if position.type == mt5.POSITION_TYPE_BUY
+                else mt5.ORDER_TYPE_BUY
+            ),
+            "position": position.ticket,
+            "price": (
+                mt5.symbol_info_tick(position.symbol).bid
+                if position.type == mt5.POSITION_TYPE_BUY
+                else mt5.symbol_info_tick(position.symbol).ask
+            ),
+            "deviation": 20,
+            "magic": position.magic,
+            "comment": position.comment,
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        result = mt5.order_send(request)
+        if result is None:
+            print("> Order send failed. Error:", mt5.last_error())
+        elif result.retcode == mt5.TRADE_RETCODE_DONE:
+            print(f"> Successfully closed {perc}% of the position with comment '{id}'.")
+        else:
+            print(f"> Failed to close position. Retcode: {result.retcode}")
+            print(f"> position: {position}")
+            print(f"> result: {result}")
+    else:
+        print(f"> No open position found with the comment: '{id}'")
+        print(f"> Current open positions: {positions}")
 
+
+# Closes all open positions
+def closeAllPositions():
+    positions = mt5.positions_get()
+    if positions is None or len(positions) == 0:
+        print("> No active positions found to close.")
+        return
+
+    for pos in positions:
+        isLong = pos.type == mt5.POSITION_TYPE_BUY
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": pos.symbol,
+            "volume": pos.volume,
+            "type": (mt5.ORDER_TYPE_SELL if isLong else mt5.ORDER_TYPE_BUY),
+            "position": pos.ticket,
+            "price": (
+                mt5.symbol_info_tick(pos.symbol).bid
+                if isLong
+                else mt5.symbol_info_tick(pos.symbol).ask
+            ),
+            "deviation": 20,
+            "magic": pos.magic,
+            "comment": "Close position",
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        result = mt5.order_send(request)
+
+        if result is None:
+            print(
+                f"> Failed to close position '{pos.ticket}'. Error:", mt5.last_error()
+            )
+        elif result.retcode == mt5.TRADE_RETCODE_DONE:
+            print(
+                f"> Successfully closed position '{pos.ticket}' with comment '{pos.comment}' for symbol '{pos.symbol}'."
+            )
+        else:
+            print(f"> Failed to close position {pos.ticket}. Retcode: {result.retcode}")
+            print(f"> position: {pos}")
+            print(f"> result: {result}")
