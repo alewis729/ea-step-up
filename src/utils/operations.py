@@ -1,6 +1,6 @@
 import os
-from typing import Optional
 from dotenv import load_dotenv
+from typing import Optional
 import MetaTrader5 as mt5
 
 load_dotenv()
@@ -17,6 +17,7 @@ def initializeMT5():
     print(f"> Connection to MT5 on server '{server}' was successful.")
     accInfo = mt5.account_info()
     if accInfo.login == login:
+        print(f"> Already logged-in to account '{login}'.")
         return
     mt5.login(login, password, server)
 
@@ -43,7 +44,7 @@ def createOrder(
     sl: Optional[float] = None,
     tp: Optional[float] = None,
     isLimit: Optional[bool] = False,
-    comment: Optional[str] = "",
+    comment: Optional[str] = None,
 ):
     if isLong is None and entry is None:
         print(
@@ -80,10 +81,11 @@ def createOrder(
         **({"sl": float(sl)} if sl is not None else {}),
         **({"tp": float(tp)} if tp is not None else {}),
         "magic": 729343,
-        "comment": comment if comment != "" else defaultComment,
+        "comment": comment if comment is not None else defaultComment,
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": mt5.ORDER_FILLING_IOC,
     }
+    print(f"> request: {request}")
     result = mt5.order_send(request)
     if result is None:
         print("> Something went wrong when creating an order.")
@@ -93,7 +95,7 @@ def createOrder(
 
 
 # Cancels all pending orders
-def cancelAll(symbol: Optional["str"]):
+def cancelAll(symbol: Optional["str"] = None):
     orders = mt5.orders_get(symbol=symbol) if symbol is not None else mt5.orders_get()
     if orders is None:
         print("> No pending orders found.")
