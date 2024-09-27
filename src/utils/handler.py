@@ -48,4 +48,4 @@ def handleAlert(data):
     elif data.get("command") in ["CLOSELONG", "CLOSESHORT"]:
         closePosition(data.get("comment"), data.get("perc"))
     elif data.get("command") in ["CLOSEALL"]:
-        closeAllPositions()
+        closeAllPositions(data.get("symbol"))

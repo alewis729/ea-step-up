@@ -37,8 +37,8 @@ def getPositionSize(entry, sl, riskTolerance: float = 1.0):
 # Places a market or limit order
 def createOrder(
     symbol: str,
-    qty: Optional["float"] = None,
-    risk: Optional["float"] = None,
+    qty: Optional[float] = None,
+    risk: Optional[float] = None,
     isLong: Optional[bool] = None,
     entry: Optional[float] = None,
     sl: Optional[float] = None,
@@ -95,7 +95,7 @@ def createOrder(
 
 
 # Cancels all pending orders
-def cancelAll(symbol: Optional["str"] = None):
+def cancelAll(symbol: Optional[str] = None):
     orders = mt5.orders_get(symbol=symbol) if symbol is not None else mt5.orders_get()
     if orders is None:
         print("> No pending orders found.")
@@ -210,7 +210,7 @@ def updateSLTP(id: str, sl: float = None, tp: float = None):
 
 
 # Closes an open position based on its comment, optionally closes % of the position
-def closePosition(id: str, percent: Optional["float"] = None):
+def closePosition(id: str, percent: Optional[float] = None):
     positions = mt5.positions_get()
     perc = 100.0
     if positions is None:
@@ -269,8 +269,10 @@ def closePosition(id: str, percent: Optional["float"] = None):
 
 
 # Closes all open positions
-def closeAllPositions():
-    positions = mt5.positions_get()
+def closeAllPositions(symbol: Optional[str] = None):
+    positions = (
+        mt5.positions_get(symbol=symbol) if symbol is not None else mt5.positions_get()
+    )
     if positions is None or len(positions) == 0:
         print("> No active positions found to close.")
         return
