@@ -27,7 +27,7 @@ testCases = [
         "risk": 0.15,
         "price": 1.11,
         "sl": 1.10,
-        "expected": 0.15,
+        "expected": 0.150,
     },
     {
         "symbol": "GBPJPY.i",
@@ -50,26 +50,53 @@ testCases = [
         "sl": 5500,
         "expected": 0.15,
     },
-    # {
-    #     "symbol": "CADJPY.i",
-    # },
-    # {
-    #     "symbol": "ETHUSD",
-    # },
-    # {
-    #     "symbol": "NDX100",
-    # },
-    # {
-    #     "symbol": "FRA40",
-    # },
-    # {
-    #     "symbol": "XAGUSD",
-    # },
+    {
+        "symbol": "CADJPY.i",
+        "risk": 0.15,
+        "price": 110,
+        "sl": 112,
+        "expected": 0.10669,
+    },
+    {
+        "symbol": "ETHUSD",
+        "risk": 0.15,
+        "price": 2464,
+        "sl": 2450,
+        "expected": 10.714285,
+    },
+    {
+        "symbol": "NDX100",
+        "risk": 0.15,
+        "price": 20020,
+        "sl": 20080,
+        "expected": 0.25,
+    },
+    {
+        "symbol": "FRA40",
+        "risk": 0.15,
+        "price": 7559,
+        "sl": 7325,
+        "expected": 0.0574349,
+    },
+    {
+        "symbol": "XAGEUR",
+        "risk": 0.15,
+        "price": 28,
+        "sl": 25.5,
+        "expected": 0.01075,
+    },
+    {
+        "symbol": "AAPL",
+        "risk": 0.15,
+        "price": 219,
+        "sl": 205,
+        "expected": 0.1071428,
+    },
 ]
 
 
 def positionSizeTests():
-    print(f"> Running positionSize tests.")
+    print(f"> Running positionSize tests...")
     for index, trade in enumerate(testCases):
         expected = round(float(trade.get("expected")), 2)
         volume = getPositionSize(
@@ -81,7 +108,7 @@ def positionSizeTests():
         )
         if expected == volume:
             print(
-                f"> ✅ Test {index}: Resulting volume for {trade.get("symbol")} is equal to expected volume."
+                f"> ✅ Test {index}: Resulting volume for {trade.get("symbol")} is equal to expected volume.\n"
             )
         else:
             print(

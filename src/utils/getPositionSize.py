@@ -3,6 +3,7 @@ from typing import Optional
 
 
 # getDecimalCount(0.0001) => 4
+# getDecimalCount(1e-05) => 5
 def getDecimalCount(number):
     numberStr = f"{number:.10f}"
     decimalCount = len(numberStr.split(".")[1]) if "." in numberStr else 0
