@@ -1,9 +1,7 @@
 import os
-from dotenv import load_dotenv
 from typing import Optional
 import MetaTrader5 as mt5
-
-load_dotenv()
+from utils.getPositionSize import getPositionSize
 
 
 # Initializes and logs in
@@ -20,18 +18,6 @@ def initializeMT5():
         print(f"> Already logged-in to account '{login}'.")
         return
     mt5.login(login, password, server)
-
-
-# Calculates qty (Volume) based on account equity and a given risk (%)
-# riskTolerance should be from 0 to 100. Example: 1.245 means 1.245% of the equity
-def getPositionSize(entry, sl, riskTolerance: float = 1.0):
-    if float(riskTolerance) < 0 or float(riskTolerance) > 100:
-        print(f"> Risk amount of '{riskTolerance}%' is invalid.")
-        return 0.0
-    accountBalance = mt5.account_info().equity
-    distanceToSL = abs(entry - sl)
-    qty = riskTolerance / 100 * accountBalance / distanceToSL
-    return round(qty, 2)
 
 
 # Places a market or limit order
@@ -70,7 +56,7 @@ def createOrder(
                 if isBullish
                 else mt5.symbol_info_tick(symbol).bid
             )
-        finalQty = getPositionSize(localEntryPrice, sl, risk)
+        finalQty = getPositionSize(symbol, localEntryPrice, sl, risk)
     request = {
         "action": mt5.TRADE_ACTION_PENDING if isLimit else mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,

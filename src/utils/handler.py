@@ -1,9 +1,14 @@
 import os
-from dotenv import load_dotenv
 import MetaTrader5 as mt5
-from utils.operations import initializeMT5, createOrder, updateSLTP, cancelPendingOrder, cancelAll,closePosition,closeAllPositions
-
-load_dotenv()
+from utils.operations import (
+    initializeMT5,
+    createOrder,
+    updateSLTP,
+    cancelPendingOrder,
+    cancelAll,
+    closePosition,
+    closeAllPositions,
+)
 
 
 def handleAlert(data):
